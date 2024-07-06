@@ -107,12 +107,4 @@ You could count the number of records in a separate variable, but why?
 as an administrator, it was decided to create the first administrator
 at application startup using values from environment variables.
 
-* To store user passwords, bcrypt is used.
-Salt could still be added for more security.
-
-* There is no validation for the username and password because
-it's not part of the job.
-
-* Any administrator can change any user,
-including another administrator, because the behavior of the application
-in this situation was not described in the assignment.
+* To store user passwords, bcrypt is used
