@@ -1,22 +1,17 @@
 You need to write a web service that stores user profiles and authorizes them.
 
 Profile has a set of fields:
-1. id (uuid, unique)
-2. email
-3. username (unique)
-4. password
-5. admin (bool)
 
-The service must have a handle set (gRPC):
-User creation,
-Issuing a list of users
-Issuing user by id
-Modify and delete profile
+id (uuid, unique)
+email
+username (unique)
+password
+admin (bool)
+The service must have a handle set (gRPC): User creation, Issuing a list of users Issuing user by id Modify and delete profile
 
 The service uses basic access authentication
 
-All registered users can view profiles.
-Admin can create, modify and delete profiles.
+All registered users can view profiles. Admin can create, modify and delete profiles.
 
 To store profile data we need to implement a primitive in memory database without using third party solutions.
 
