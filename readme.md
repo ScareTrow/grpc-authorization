@@ -26,12 +26,6 @@ Time is 1 working week, if you can do it sooner - great).
 
 The task can be done with varying degrees of depth. If you realize that you won't have time to do it better, you should specify all the important problems and assumptions in the README file.
 
-# Notes
-
-1. Since sync.Map does not provide a way to get the number of records,
-MemoryRepository.GetAll creates an empty slice and on each iteration it expands it if necessary (append).
-this has a negative impact on performance.
-We probably could count the number of records in a separate var, but why? :D
 
 ## Dependencies for development
 
@@ -88,7 +82,7 @@ The application uses a clean architecture, with the following layers:
 * A simple error handling mechanism has been implemented in the internal/common package to handle domain errors, as described by Nate Finch here [Error Flags]().
 a simple error handling mechanism described by Nate Finch here [Error Flags](https://npf.io/2021/04/errorflags/).
 
-* Since the project is a primitive CRUD interface and contains
+* Since the project is a primitive CRUD interface and do not contains
 complex business logic, it was decided to abandon the business logic layer
 and use a regular anemic model to represent the data in the application.
 
@@ -98,11 +92,9 @@ creating and modifying a user, return an empty object.
 * Sync.Map was chosen to store the data because it is thread-safe
 
 * Since sync.Map does not provide a way to get the number of records,
-MemoryRepository.GetAll creates an empty slice and on each
-iteration it expands it if necessary (append).
-This has a negative impact on performance.
-You could count the number of records in a separate variable, but why?
-
+MemoryRepository.GetAll creates an empty slice and on each iteration it expands it if necessary (append).
+this has a negative impact on performance.
+We probably could count the number of records in a separate var, but why? :D
 * Since you have to log in to create a user,
 as an administrator, it was decided to create the first administrator
 at application startup using values from environment variables.
