@@ -74,7 +74,7 @@ The `tests` directory contains the end-to-end tests.
 
 The application uses a clean architecture, with the following layers:
 * transport
-* application
+* usecases
 * infrastructure
 
 ## Solutions and notes

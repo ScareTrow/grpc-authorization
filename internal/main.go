@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ScareTrow/grpc_user_auth/internal/application"
 	"github.com/ScareTrow/grpc_user_auth/internal/common"
 	"github.com/ScareTrow/grpc_user_auth/internal/infrastructure"
 	"github.com/ScareTrow/grpc_user_auth/internal/transport"
+	"github.com/ScareTrow/grpc_user_auth/internal/usecases"
 )
 
 const (
@@ -38,11 +38,11 @@ func run() error {
 	ctx = common.InjectLogger(ctx, logger)
 
 	repo := infrastructure.NewMemoryRepository()
-	app := application.NewApplication(repo)
-	handlers := transport.NewGRPCHandlers(app)
+	userUseCases := usecases.NewUserUseCases(repo)
+	handlers := transport.NewGRPCHandlers(userUseCases)
 	grpcServer := transport.NewGRPCServer(logger, handlers)
 
-	if err := createAdmin(app); err != nil {
+	if err := createAdmin(userUseCases); err != nil {
 		return fmt.Errorf("failed to create admin: %w", err)
 	}
 
@@ -56,7 +56,7 @@ func run() error {
 	return nil
 }
 
-func createAdmin(app *application.Application) error {
+func createAdmin(userUseCases *usecases.UserUseCases) error {
 	adminUsername := os.Getenv(AdminUsernameEnv)
 	adminEmail := os.Getenv(AdminEmailEnv)
 	adminPassword := os.Getenv(AdminPasswordEnv)
@@ -65,7 +65,7 @@ func createAdmin(app *application.Application) error {
 		return fmt.Errorf("admin username, email and password must be set")
 	}
 
-	_, err := app.CreateUser(
+	_, err := userUseCases.CreateUser(
 		adminUsername,
 		adminEmail,
 		adminPassword,
