@@ -73,9 +73,31 @@ The `internal` directory contains the main application code.
 The `tests` directory contains the end-to-end tests.
 
 The application uses a clean architecture, with the following layers:
-* transport
-* usecases
-* infrastructure
+* transport -- presentation layer: serving gRPC requests
+* usecases -- business logic layer
+* infrastructure -- data source: database accesses
+
+### Alternative structure
+
+The reason for choosing such a directory structure is the fact that
+that this application is a primitive CRUD interface for only one entity.
+single entity. In an application with multiple units and complex business logic, the
+the architecture could look like this:
+
+```
+internal/
+├─── main.go
+├─── common/
+│ ├─── context_logger.go
+│ ├──── disabled_logger.go
+│ └─── flagged_error.go
+└─── user/
+    ├─── models.go
+    ├─── usecases.go
+    ├─── handlers.go
+    ├─── repository.go
+    └─── repository_test.go
+```
 
 ## Solutions and notes
 
