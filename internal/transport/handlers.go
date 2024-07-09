@@ -2,11 +2,13 @@ package transport
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
-	"net/mail"
+	"strings"
 
-	"github.com/google/uuid"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -21,19 +23,14 @@ var _ proto.UserServiceServer = (*GRPCHandlers)(nil)
 type GRPCHandlers struct {
 	proto.UnimplementedUserServiceServer
 
-	userUseCases  *usecases.UserUseCases
-	authenticator *Authenticator[*models.User]
+	userUseCases *usecases.UserUseCases
 }
 
-func NewGRPCHandlers(
-	userUseCases *usecases.UserUseCases,
-	authenticator *Authenticator[*models.User],
-) *GRPCHandlers {
+func NewGRPCHandlers(userUseCases *usecases.UserUseCases) *GRPCHandlers {
 	return &GRPCHandlers{
 		UnimplementedUserServiceServer: proto.UnimplementedUserServiceServer{},
 
-		userUseCases:  userUseCases,
-		authenticator: authenticator,
+		userUseCases: userUseCases,
 	}
 }
 
@@ -43,22 +40,22 @@ func (h *GRPCHandlers) CreateUser(
 	ctx context.Context,
 	request *proto.CreateUserRequest,
 ) (*proto.CreateUserResponse, error) {
-	err := h.adminOnly(ctx)
+	err := h.AdminOnly(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = mail.ParseAddress(request.Email)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid email")
-	}
-
-	id, err := h.userUseCases.CreateUser(
+	cmd, err := usecases.NewCreateUserCommand(
 		request.Username,
 		request.Email,
 		request.Password,
 		request.Admin,
 	)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "Validation Error")
+	}
+
+	id, err := h.userUseCases.CreateUser(cmd)
 	switch {
 	case err == nil:
 	case common.IsFlaggedError(err, common.FlagAlreadyExists):
@@ -94,23 +91,23 @@ func (h *GRPCHandlers) GetAllUsers(_ context.Context, _ *emptypb.Empty) (*proto.
 }
 
 func (h *GRPCHandlers) GetUserByID(ctx context.Context, request *proto.GetUserRequest) (*proto.GetUserResponse, error) {
-	err := h.adminOnly(ctx)
+	err := h.AdminOnly(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	parsedUUID, err := uuid.Parse(request.Id)
+	query, err := usecases.NewGetUserByIDQuery(request.Id)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid UUID")
+		return nil, status.Error(codes.InvalidArgument, "Validation Error")
 	}
 
-	user, err := h.userUseCases.GetUserByID(parsedUUID)
+	user, err := h.userUseCases.GetUserByID(query)
 	switch {
 	case err == nil:
 	case common.IsFlaggedError(err, common.FlagNotFound):
 		return nil, status.Error(codes.NotFound, "User not found")
 	default:
-		return nil, fmt.Errorf("failed to get user by id %q: %w", parsedUUID, err)
+		return nil, fmt.Errorf("failed to get user by id %q: %w", request.Id, err)
 	}
 
 	response := &proto.GetUserResponse{
@@ -126,28 +123,23 @@ func (h *GRPCHandlers) GetUserByID(ctx context.Context, request *proto.GetUserRe
 }
 
 func (h *GRPCHandlers) UpdateUser(ctx context.Context, request *proto.UpdateUserRequest) (*emptypb.Empty, error) {
-	err := h.adminOnly(ctx)
+	err := h.AdminOnly(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	parsedUUID, err := uuid.Parse(request.Id)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid UUID")
-	}
-
-	_, err = mail.ParseAddress(request.Email)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid email")
-	}
-
-	err = h.userUseCases.UpdateUser(
-		parsedUUID,
+	cmd, err := usecases.NewUpdateUserCommand(
+		request.Id,
 		request.Username,
 		request.Email,
 		request.Password,
 		request.Admin,
 	)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "Validation Error")
+	}
+
+	err = h.userUseCases.UpdateUser(cmd)
 	switch {
 	case err == nil:
 	case common.IsFlaggedError(err, common.FlagNotFound):
@@ -160,17 +152,17 @@ func (h *GRPCHandlers) UpdateUser(ctx context.Context, request *proto.UpdateUser
 }
 
 func (h *GRPCHandlers) DeleteUser(ctx context.Context, request *proto.DeleteUserRequest) (*emptypb.Empty, error) {
-	err := h.adminOnly(ctx)
+	err := h.AdminOnly(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	parsedUUID, err := uuid.Parse(request.Id)
+	cmd, err := usecases.NewDeleteUserCommand(request.Id)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "Invalid UUID")
+		return nil, status.Error(codes.InvalidArgument, "Validation Error")
 	}
 
-	err = h.userUseCases.DeleteUser(parsedUUID)
+	err = h.userUseCases.DeleteUser(cmd)
 	switch {
 	case err == nil:
 	case common.IsFlaggedError(err, common.FlagNotFound):
@@ -182,8 +174,67 @@ func (h *GRPCHandlers) DeleteUser(ctx context.Context, request *proto.DeleteUser
 	return empty, nil
 }
 
-func (h *GRPCHandlers) adminOnly(ctx context.Context) error {
-	user, err := h.authenticator.GetAuthenticatedUser(ctx)
+type authContextKey struct{}
+
+func (h *GRPCHandlers) BasicAuthUnaryInterceptor(
+	ctx context.Context,
+	req any,
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (any, error) {
+	const expectedSchema = "Basic"
+	const authorizationHeaderKey = "authorization"
+	const credentialsNumber = 2
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "Missing metadata")
+	}
+
+	authHeader, ok := md[authorizationHeaderKey]
+	if !ok || len(authHeader) != 1 {
+		return nil, status.Error(codes.Unauthenticated, "Missing authorization token")
+	}
+
+	components := strings.Split(authHeader[0], " ")
+	schema, token := components[0], components[1]
+
+	if schema != expectedSchema {
+		return nil, status.Error(codes.Unauthenticated, "Invalid authorization schema")
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "Invalid authorization token")
+	}
+
+	credentials := strings.SplitN(string(decoded), ":", credentialsNumber)
+	username, password := credentials[0], credentials[1]
+
+	user, err := h.userUseCases.AuthenticateUser(username, password)
+	if common.IsFlaggedError(err, common.FlagNotFound) {
+		return nil, status.Error(codes.Unauthenticated, "Invalid credentials")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate user: %w", err)
+	}
+
+	ctx = context.WithValue(ctx, authContextKey{}, user)
+
+	return handler(ctx, req)
+}
+
+func (h *GRPCHandlers) GetAuthenticatedUser(ctx context.Context) (*models.User, error) {
+	user, ok := ctx.Value(authContextKey{}).(*models.User)
+	if !ok {
+		return nil, status.Error(codes.Internal, "Failed to get authenticated user")
+	}
+
+	return user, nil
+}
+
+func (h *GRPCHandlers) AdminOnly(ctx context.Context) error {
+	user, err := h.GetAuthenticatedUser(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get authenticated user: %w", err)
 	}
