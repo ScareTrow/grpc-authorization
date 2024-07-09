@@ -5,9 +5,15 @@ name: Build & Test
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "*" ]
+
+env:
+  SERVER_ADDRESS: "0.0.0.0:50051"
+  ADMIN_USERNAME: "admin"
+  ADMIN_EMAIL: "admin@admin.com"
+  ADMIN_PASSWORD: "admin"
 
 jobs:
 
