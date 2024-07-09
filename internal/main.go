@@ -37,10 +37,11 @@ func run() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	ctx = common.InjectLogger(ctx, logger)
 
-	repo := infrastructure.NewMemoryRepository()
+	repo := infrastructure.NewRepository()
 	userUseCases := usecases.NewUserUseCases(repo)
-	handlers := transport.NewGRPCHandlers(userUseCases)
-	grpcServer := transport.NewGRPCServer(logger, handlers)
+	authenticator := transport.NewAuthenticator(userUseCases.AuthenticateUser)
+	handlers := transport.NewGRPCHandlers(userUseCases, authenticator)
+	grpcServer := transport.NewGRPCServer(logger, authenticator, handlers)
 
 	if err := createAdmin(userUseCases); err != nil {
 		return fmt.Errorf("failed to create admin: %w", err)
