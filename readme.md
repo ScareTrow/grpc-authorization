@@ -121,4 +121,4 @@ We probably could count the number of records in a separate var, but why? :D
 as an administrator, it was decided to create the first administrator
 at application startup using values from environment variables.
 
-* To store user passwords, bcrypt is used
+* To encrypt stored user passwords, bcrypt is used
