@@ -101,9 +101,6 @@ internal/
 
 ## Solutions and notes
 
-* A simple error handling mechanism has been implemented in the internal/common package to handle domain errors, as described by Nate Finch here [Error Flags]().
-a simple error handling mechanism described by Nate Finch here [Error Flags](https://npf.io/2021/04/errorflags/).
-
 * Since the project is a primitive CRUD interface and do not contains
 complex business logic, it was decided to abandon the business logic layer
 and use a regular anemic model to represent the data in the application.
